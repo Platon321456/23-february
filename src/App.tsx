@@ -333,7 +333,7 @@ export default function App() {
     }
   };
 
-  const playTrack = (url: string) => {
+  const playTrack = (url: string, forceImmediate = false) => {
     if (!audioRef.current || !url) return;
     
     const audio = audioRef.current;
@@ -357,12 +357,40 @@ export default function App() {
       }, 50);
       return;
     }
+
+    // For mobile: if audio is paused or we need immediate play (user gesture context)
+    if (forceImmediate || audio.paused || !audio.src) {
+      audio.pause();
+      audio.src = url;
+      audio.load();
+      audio.volume = 0;
+      
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          let fadeInVolume = 0;
+          fadeIntervalRef.current = setInterval(() => {
+            if (fadeInVolume < 0.95) {
+              fadeInVolume += 0.05;
+              audio.volume = fadeInVolume;
+            } else {
+              audio.volume = 1;
+              clearInterval(fadeIntervalRef.current!);
+            }
+          }, 50);
+        }).catch(e => {
+          console.error("Audio play failed", e);
+          audio.volume = 1;
+        });
+      }
+      return;
+    }
     
-    // Smooth fade out
+    // Smooth fade out for track switching (when already playing)
     let volume = audio.volume;
     fadeIntervalRef.current = setInterval(() => {
-      if (volume > 0.05) {
-        volume -= 0.1; // Faster fade out
+      if (volume > 0.1) {
+        volume -= 0.1;
         audio.volume = Math.max(0, volume);
       } else {
         clearInterval(fadeIntervalRef.current!);
@@ -374,7 +402,6 @@ export default function App() {
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           playPromise.then(() => {
-            // Smooth fade in
             let fadeInVolume = 0;
             fadeIntervalRef.current = setInterval(() => {
               if (fadeInVolume < 0.95) {
@@ -387,7 +414,6 @@ export default function App() {
             }, 50);
           }).catch(e => {
             console.error("Audio play failed", e);
-            // Fallback: if play fails, try again without fade or just set volume
             audio.volume = 1;
           });
         }
@@ -401,13 +427,13 @@ export default function App() {
     
     const tabAudio = CONTENT.audio[tabId];
     if (tabAudio) {
-      playTrack(tabAudio);
+      playTrack(tabAudio, true); // Force immediate play for mobile gesture
     }
   };
 
   const startRejection = () => {
     setPhase('rejected');
-    playTrack(playlist[0]);
+    playTrack(playlist[0], true); // Force immediate play for mobile gesture
   };
 
   const handleAudioEnded = () => {

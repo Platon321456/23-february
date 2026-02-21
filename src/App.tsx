@@ -8,10 +8,10 @@ import { Fish, Heart, ArrowLeft, ArrowRight, Sparkles, PartyPopper, CheckCircle2
 const CONTENT = {
   // Аудио
   audio: {
-    main: "https://image2url.com/r2/default/audio/1771693748634-6660d5ee-e133-442d-a711-40fabb2d17f5.mp3",
-    beauty: "https://image2url.com/r2/default/audio/1771694042849-94ac6b71-bfcf-47d8-954e-2f9b0754c84e.mp3", // Музыка для вкладки "В красоту"
-    fun: "https://image2url.com/r2/default/audio/1771693539919-63acece2-7ecc-48c2-a72f-f4f4883c00be.mp3",    // Музыка для вкладки "В веселье"
-    love: "https://image2url.com/r2/default/audio/1771693951135-65d99293-c34d-4dac-9bac-1048c1c3b255.mp3"    // Музыка для вкладки "В любовь"
+    main: "https://image2url.com/r2/default/audio/1771697018951-53f38852-6034-4ba5-b03b-45f1ae118143.mp3",
+    beauty: "https://image2url.com/r2/default/audio/1771697165169-af5a158e-fc6c-4e32-b1c9-c526239e7e8d.mp3", // Музыка для вкладки "В красоту"
+    fun: "https://image2url.com/r2/default/audio/1771697018702-f17dfa30-7cf3-481c-94cb-af5dd5c8e83d.mp3",    // Музыка для вкладки "В веселье"
+    love: "https://image2url.com/r2/default/audio/1771697004423-daae9ce0-fd07-4c31-aa9b-624ac648fc80.mp3"    // Музыка для вкладки "В любовь"
   },
   
   // Начальные фоны
@@ -129,6 +129,7 @@ export default function App() {
   // Audio Playlist State
   const [currentAudioIndex, setCurrentAudioIndex] = useState(0);
   const playlist = CONTENT.audio.main.split(',').map(url => url.trim()).filter(url => url !== "");
+  const fadeIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Slideshow State
   const [slideIndex, setSlideIndex] = useState(0);
@@ -336,15 +337,35 @@ export default function App() {
     if (!audioRef.current || !url) return;
     
     const audio = audioRef.current;
+
+    // Clear any existing fade intervals
+    if (fadeIntervalRef.current) {
+      clearInterval(fadeIntervalRef.current);
+    }
+
+    // If it's already playing this track, just ensure it's audible
+    if (audio.src === url && !audio.paused) {
+      let vol = audio.volume;
+      fadeIntervalRef.current = setInterval(() => {
+        if (vol < 0.95) {
+          vol += 0.05;
+          audio.volume = vol;
+        } else {
+          audio.volume = 1;
+          clearInterval(fadeIntervalRef.current!);
+        }
+      }, 50);
+      return;
+    }
     
     // Smooth fade out
     let volume = audio.volume;
-    const fadeOut = setInterval(() => {
+    fadeIntervalRef.current = setInterval(() => {
       if (volume > 0.05) {
-        volume -= 0.05;
-        audio.volume = volume;
+        volume -= 0.1; // Faster fade out
+        audio.volume = Math.max(0, volume);
       } else {
-        clearInterval(fadeOut);
+        clearInterval(fadeIntervalRef.current!);
         audio.pause();
         audio.src = url;
         audio.load();
@@ -355,16 +376,20 @@ export default function App() {
           playPromise.then(() => {
             // Smooth fade in
             let fadeInVolume = 0;
-            const fadeIn = setInterval(() => {
+            fadeIntervalRef.current = setInterval(() => {
               if (fadeInVolume < 0.95) {
                 fadeInVolume += 0.05;
                 audio.volume = fadeInVolume;
               } else {
                 audio.volume = 1;
-                clearInterval(fadeIn);
+                clearInterval(fadeIntervalRef.current!);
               }
             }, 50);
-          }).catch(e => console.error("Audio play failed", e));
+          }).catch(e => {
+            console.error("Audio play failed", e);
+            // Fallback: if play fails, try again without fade or just set volume
+            audio.volume = 1;
+          });
         }
       }
     }, 50);
